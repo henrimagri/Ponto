@@ -59,10 +59,6 @@
                             </div>
                         </form>
                         
-                        <div class="text-center mt-3">
-                            <p class="mb-0">Não tem uma conta? <a href="{{ route('register') }}">Registre-se</a></p>
-                        </div>
-
                         <hr>
                         <div class="text-center">
                             <h6>Usuários de Teste:</h6>
