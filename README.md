@@ -62,5 +62,5 @@ Cada registro é salvo em uma única linha na tabela de pontos, facilitando o co
 - **Gestor:** gestor@teste.com / 123456
 - **Funcionário:** funcionario@teste.com / 123456
 
-## Licença
+## Licençaa
 MIT
