@@ -1,0 +1,232 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\RegistroPonto;
+use Illuminate\Http\Request;
+
+class PontoController extends Controller
+{
+    /**
+     * Registra um ponto para o usuário atual
+     * 
+     * Este método registra as 4 marcações diárias (entrada, saída para almoço, retorno do almoço, saída)
+     * Todas as marcações são salvas no mesmo registro (linha) da tabela, em campos diferentes
+     */
+    public function registrarPonto(Request $request)
+    {
+        $user = auth()->user();
+        $agora = now();
+        $hoje = $agora->toDateString();
+        
+        // Verificar se já existe um registro para hoje
+        // Garantir que só exista um registro por dia usando formato correto para MySQL
+        $registroDia = $user->registrosPonto()
+                            ->where('data', $hoje)
+                            ->first();
+                            
+        if (!$registroDia) {
+            // Criar novo registro para hoje com a primeira marcação (Entrada)
+            $registroDia = $user->registrosPonto()->create([
+                'data' => $hoje,
+                'marcacao1' => $agora  // Primeira marcação: Entrada
+                // As outras marcações (marcacao2, marcacao3, marcacao4) ficarão null por enquanto
+            ]);
+            
+            $numeroMarcacao = 1;
+            $tipoMarcacao = 'Entrada';
+        } else {
+            // Verificar qual marcação será feita (qual é o próximo campo a preencher)
+            $proximaMarcacao = $registroDia->proximaMarcacao();
+            
+            if ($proximaMarcacao == 0) {
+                // Todas as 4 marcações já foram realizadas
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Todas as marcações do dia já foram realizadas.',
+                    'registroDia' => $registroDia
+                ]);
+            }
+            
+            // Registrar a próxima marcação no mesmo registro (atualizando o campo correspondente)
+            $campo = "marcacao{$proximaMarcacao}"; // marcacao2, marcacao3 ou marcacao4
+            $registroDia->$campo = $agora;
+            $registroDia->save();
+            
+            $numeroMarcacao = $proximaMarcacao;
+            
+            $tiposMarcacao = [
+                1 => 'Entrada',
+                2 => 'Saída para almoço',
+                3 => 'Retorno do almoço',
+                4 => 'Saída'
+            ];
+            
+            $tipoMarcacao = $tiposMarcacao[$proximaMarcacao];
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Ponto registrado com sucesso!',
+            'data' => [
+                'data' => $agora->format('d/m/Y'),
+                'hora' => $agora->format('H:i:s'),
+                'tipo_marcacao' => $tipoMarcacao,
+                'numero_marcacao' => $numeroMarcacao,
+                'todas_marcacoes_realizadas' => $registroDia->todasMarcacoesRealizadas()
+            ],
+            'registroDia' => $registroDia
+        ]);
+    }
+    
+    /**
+     * Obtém o estado atual do ponto para o usuário logado
+     * 
+     * Retorna informações sobre as marcações já realizadas e a próxima marcação a ser feita
+     */
+    public function statusPontoHoje()
+    {
+        $user = auth()->user();
+        $hoje = now()->toDateString();
+        
+        // Verificar se já existe um registro para hoje
+        // Usando formato de data apropriado para MySQL
+        $registroDia = $user->registrosPonto()
+                            ->where('data', $hoje)
+                            ->first();
+                            
+        if (!$registroDia) {
+            // Se não houver registros hoje, a próxima marcação será a primeira (Entrada)
+            return response()->json([
+                'status' => 'pending',
+                'message' => 'Nenhuma marcação realizada hoje.',
+                'proximaMarcacao' => 1,
+                'tipoMarcacao' => 'Entrada',
+                'tipoProximaMarcacao' => 'Entrada',
+                'marcacoes' => []
+            ]);
+        }
+        
+        // Define os tipos de marcação para cada campo no banco
+        $tiposMarcacao = [
+            'marcacao1' => 'Entrada',
+            'marcacao2' => 'Saída para almoço',
+            'marcacao3' => 'Retorno do almoço',
+            'marcacao4' => 'Saída'
+        ];
+        
+        // Coleta as marcações já realizadas (campos preenchidos)
+        $marcacoes = [];
+        foreach ($tiposMarcacao as $campo => $tipo) {
+            if (!is_null($registroDia->$campo)) {
+                $marcacoes[] = [
+                    'tipo' => $tipo,
+                    'hora' => $registroDia->$campo->format('H:i:s'),
+                    'campo' => $campo
+                ];
+            }
+        }
+        
+        // Determina qual é a próxima marcação
+        $proximaMarcacao = $registroDia->proximaMarcacao();
+        $tipoProximaMarcacao = $proximaMarcacao > 0 ? $tiposMarcacao["marcacao{$proximaMarcacao}"] : null;
+        
+        return response()->json([
+            'status' => 'success',
+            'data' => $hoje,
+            'proximaMarcacao' => $proximaMarcacao,
+            'tipoProximaMarcacao' => $tipoProximaMarcacao,
+            'todasMarcacoesRealizadas' => $registroDia->todasMarcacoesRealizadas(),
+            'marcacoes' => $marcacoes,
+            'registroDia' => $registroDia
+        ]);
+    }
+    
+    /**
+     * Exibe o relatório de pontos do usuário logado
+     */
+    public function relatorio(Request $request)
+    {
+        $user = auth()->user();
+        
+        // Filtros de data
+        $dataInicio = $request->filled('data_inicio') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_inicio) : null;
+        $dataFim = $request->filled('data_fim') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_fim) : null;
+        
+        // Query base para registros de ponto
+        $query = $user->registrosPonto();
+        
+        // Aplicar filtros de data se fornecidos
+        if ($dataInicio) {
+            $query->where('data', '>=', $dataInicio);
+        }
+        
+        if ($dataFim) {
+            $query->where('data', '<=', $dataFim);
+        }
+        
+        // Buscar registros de ponto (sem duplicatas)
+        $datasRegistros = $query->selectRaw('MIN(id) as id, data')
+                              ->groupBy('data')
+                              ->orderBy('data', 'desc')
+                              ->take($request->filled('data_inicio') ? 100 : 30) // Aumenta o limite se houver filtro
+                              ->pluck('id');
+        
+        // Agora buscamos os registros completos baseados nos IDs únicos
+        $registros = RegistroPonto::whereIn('id', $datasRegistros)
+                                 ->orderBy('data', 'desc')
+                                 ->get();
+        
+        return view('ponto.relatorio', compact('registros', 'user', 'dataInicio', 'dataFim'));
+    }
+    
+    /**
+     * Exibe o relatório de pontos de um usuário específico (para admins e gestores)
+     */
+    public function relatorioFuncionario($id, Request $request)
+    {
+        // Verificar se o usuário atual é admin ou gestor
+        $currentUser = auth()->user();
+        if (!$currentUser->isAdmin() && !$currentUser->isManager()) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
+        }
+        
+        // Buscar o usuário pelo ID
+        $user = \App\Models\User::findOrFail($id);
+        
+        // Se for gestor, só pode ver seus subordinados
+        if ($currentUser->isManager() && $user->manager_id !== $currentUser->id && $user->id !== $currentUser->id) {
+            return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
+        }
+        
+        // Filtros de data
+        $dataInicio = $request->filled('data_inicio') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_inicio) : null;
+        $dataFim = $request->filled('data_fim') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_fim) : null;
+        
+        // Query base para registros de ponto
+        $query = $user->registrosPonto();
+        
+        // Aplicar filtros de data se fornecidos
+        if ($dataInicio) {
+            $query->where('data', '>=', $dataInicio);
+        }
+        
+        if ($dataFim) {
+            $query->where('data', '<=', $dataFim);
+        }
+        
+        // Buscar registros de ponto (sem duplicatas)
+        $datasRegistros = $query->selectRaw('MIN(id) as id, data')
+                               ->groupBy('data')
+                               ->orderBy('data', 'desc')
+                               ->take($request->filled('data_inicio') ? 100 : 30) // Aumenta o limite se houver filtro
+                               ->pluck('id');
+        
+        // Agora buscamos os registros completos baseados nos IDs únicos
+        $registros = RegistroPonto::whereIn('id', $datasRegistros)
+                                  ->orderBy('data', 'desc')
+                                  ->get();
+        
+        return view('ponto.relatorio_funcionario', compact('registros', 'user', 'dataInicio', 'dataFim'));
+    }
+}
