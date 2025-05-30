@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 class ValidCpf implements ValidationRule
 {
     /**
-     * Run the validation rule.
+     * Executa a validação da regra.
      *
      * @param  \Closure(string, ?string=): \Illuminate\Translation\PotentiallyTranslatedString  $fail
      */
@@ -20,19 +20,19 @@ class ValidCpf implements ValidationRule
     }
 
     /**
-     * Validate CPF
+     * Valida o CPF
      */
     private function isValidCpf($cpf)
     {
-        // Remove any non-numeric characters
+        // Remove qualquer caractere não numérico
         $cpf = preg_replace('/\D/', '', $cpf);
 
-        // Check if it has 11 digits
+        // Verifica se possui 11 dígitos
         if (strlen($cpf) != 11) {
             return false;
         }
 
-        // Check for known invalid CPFs
+        // Verifica CPFs inválidos conhecidos
         $invalid = [
             '00000000000', '11111111111', '22222222222', '33333333333',
             '44444444444', '55555555555', '66666666666', '77777777777',
@@ -43,7 +43,7 @@ class ValidCpf implements ValidationRule
             return false;
         }
 
-        // Validate first check digit
+        // Valida o primeiro dígito verificador
         $sum = 0;
         for ($i = 0; $i < 9; $i++) {
             $sum += $cpf[$i] * (10 - $i);
@@ -55,7 +55,7 @@ class ValidCpf implements ValidationRule
             return false;
         }
 
-        // Validate second check digit
+        // Valida o segundo dígito verificador
         $sum = 0;
         for ($i = 0; $i < 10; $i++) {
             $sum += $cpf[$i] * (11 - $i);

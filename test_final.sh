@@ -3,13 +3,13 @@
 echo "=== TESTE COMPLETO DO SISTEMA DE GERENCIAMENTO DE FUNCIONÁRIOS ==="
 echo ""
 
-# Cores para output
+# Cores para o output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m' # Sem cor
 
-# Função para mostrar status
+# Função para mostrar o status
 show_status() {
     if [ $1 -eq 0 ]; then
         echo -e "${GREEN}✅ $2${NC}"
@@ -37,7 +37,7 @@ show_status $? "Migrações do banco de dados"
 
 echo ""
 echo "3. Verificando usuários de teste..."
-user_count=$(php artisan tinker --execute="echo App\Models\User::count();" 2>/dev/null | tail -n1)
+user_count=$(php artisan tinker --execute="echo App\\Models\\User::count();" 2>/dev/null | tail -n1)
 if [ "$user_count" -ge 3 ]; then
     show_status 0 "Usuários de teste ($user_count usuários encontrados)"
     echo "   📧 admin@admin.com (admin)"

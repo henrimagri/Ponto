@@ -1,49 +1,49 @@
 <?php
-// Simple test to verify the Laravel Employee Management System
+// Teste simples para verificar o Sistema de Gerenciamento de Funcionários em Laravel
 
-echo "=== Laravel Employee Management System Test ===\n\n";
+echo "=== Teste do Sistema de Gerenciamento de Funcionários em Laravel ===\n\n";
 
-// Test 1: Check if we can connect to the application
-echo "1. Testing basic connectivity...\n";
+// Teste 1: Verifica se é possível conectar à aplicação
+echo "1. Testando conectividade básica...\n";
 $response = file_get_contents('http://127.0.0.1:8000/login');
 if ($response !== false && strpos($response, 'Login') !== false) {
-    echo "✅ Login page loads successfully\n";
+    echo "✅ Página de login carregada com sucesso\n";
 } else {
-    echo "❌ Failed to load login page\n";
+    echo "❌ Falha ao carregar a página de login\n";
 }
 
-// Test 2: Check database connection by testing a simple query
-echo "\n2. Testing database connection...\n";
+// Teste 2: Verifica conexão com o banco de dados executando uma consulta simples
+echo "\n2. Testando conexão com o banco de dados...\n";
 try {
     require_once 'vendor/autoload.php';
     $app = require_once 'bootstrap/app.php';
     $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
     
     $userCount = \App\Models\User::count();
-    echo "✅ Database connection successful. Found {$userCount} users.\n";
+    echo "✅ Conexão com o banco de dados bem-sucedida. Encontrados {$userCount} usuários.\n";
     
-    // List test users
+    // Listar usuários de teste
     $users = \App\Models\User::select('email', 'role')->get();
-    echo "Test users available:\n";
+    echo "Usuários de teste disponíveis:\n";
     foreach ($users as $user) {
         echo "  - {$user->email} ({$user->role})\n";
     }
     
 } catch (Exception $e) {
-    echo "❌ Database connection failed: " . $e->getMessage() . "\n";
+    echo "❌ Falha na conexão com o banco de dados: " . $e->getMessage() . "\n";
 }
 
-echo "\n=== Test Complete ===\n";
-echo "\nYou can now test the system manually:\n";
-echo "1. Open http://127.0.0.1:8000/login\n";
-echo "2. Login with:\n";
+echo "\n=== Teste Concluído ===\n";
+echo "\nAgora você pode testar o sistema manualmente:\n";
+echo "1. Abra http://127.0.0.1:8000/login\n";
+echo "2. Faça login com:\n";
 echo "   - Admin: admin@admin.com / 123456\n";
-echo "   - Manager: gestor@teste.com / 123456\n";
-echo "   - Employee: funcionario@teste.com / 123456\n";
-echo "3. Test CRUD operations:\n";
-echo "   - Create new users (Admin/Manager only)\n";
-echo "   - View user details\n";
-echo "   - Edit user information\n";
-echo "   - Delete users (Admin only)\n";
-echo "4. Test CEP lookup functionality\n";
-echo "5. Test role-based access control\n";
+echo "   - Gestor: gestor@teste.com / 123456\n";
+echo "   - Funcionário: funcionario@teste.com / 123456\n";
+echo "3. Teste as operações CRUD:\n";
+echo "   - Criar novos usuários (apenas Admin/Gestor)\n";
+echo "   - Visualizar detalhes do usuário\n";
+echo "   - Editar informações do usuário\n";
+echo "   - Excluir usuários (apenas Admin)\n";
+echo "4. Teste a funcionalidade de busca de CEP\n";
+echo "5. Teste o controle de acesso por perfil\n";

@@ -86,10 +86,13 @@
                                 <td>{{ $registro->marcacao1 ? $registro->marcacao1->format('H:i:s') : '-' }}</td>
                                 <td>{{ $registro->marcacao2 ? $registro->marcacao2->format('H:i:s') : '-' }}</td>
                                 <td>{{ $registro->marcacao3 ? $registro->marcacao3->format('H:i:s') : '-' }}</td>
-                                <td>{{ $registro->marcacao4 ? $registro->marcacao4->format('H:i:s') : '-' }}</td>                                <td>
-                                    @if($registro->todasMarcacoesRealizadas())
+                                <td>{{ $registro->marcacao4 ? $registro->marcacao4->format('H:i:s') : '-' }}</td>
+                                <td>
+                                    @if($registro->todasMarcacoesRealizadas)
                                         @php
-                                            $horasTrabalhadas = $registro->calcularHorasTrabalhadas();
+                                            $horasTrabalhadas = is_callable($registro->calcularHorasTrabalhadas)
+                                                ? call_user_func($registro->calcularHorasTrabalhadas)
+                                                : (is_array($registro->calcularHorasTrabalhadas) ? $registro->calcularHorasTrabalhadas : ['horas'=>0,'minutos'=>0]);
                                             echo $horasTrabalhadas['horas'] . 'h ' . $horasTrabalhadas['minutos'] . 'm';
                                         @endphp
                                     @else
@@ -106,19 +109,20 @@
                         <h6><i class="fas fa-info-circle me-2"></i>Resumo:</h6>
                         <p class="mb-1"><strong>Total de registros:</strong> {{ $registros->count() }}</p>
                         <p class="mb-1"><strong>Registros completos:</strong> 
-                            {{ $registros->filter(function($registro) { return $registro->todasMarcacoesRealizadas(); })->count() }}
+                            {{ $registros->filter(function($registro) { return $registro->todasMarcacoesRealizadas; })->count() }}
                         </p>
                         <p class="mb-1"><strong>Registros incompletos:</strong> 
-                            {{ $registros->filter(function($registro) { return !$registro->todasMarcacoesRealizadas(); })->count() }}
+                            {{ $registros->filter(function($registro) { return !$registro->todasMarcacoesRealizadas; })->count() }}
                         </p>
                           @php
                         // Calcular o total geral de horas trabalhadas
                         $totalMinutosGeral = 0;
-                        $registrosCompletos = $registros->filter(function($registro) { return $registro->todasMarcacoesRealizadas(); });
-                        
+                        $registrosCompletos = $registros->filter(function($registro) { return $registro->todasMarcacoesRealizadas; });
                         foreach ($registrosCompletos as $registro) {
-                            $horasTrabalhadas = $registro->calcularHorasTrabalhadas();
-                            $totalMinutosGeral += $horasTrabalhadas['total_minutos'];
+                            $horasTrabalhadas = is_callable($registro->calcularHorasTrabalhadas)
+                                ? call_user_func($registro->calcularHorasTrabalhadas)
+                                : (is_array($registro->calcularHorasTrabalhadas) ? $registro->calcularHorasTrabalhadas : ['total_minutos'=>0]);
+                            $totalMinutosGeral += $horasTrabalhadas['total_minutos'] ?? 0;
                         }
                         
                         $horasGeral = floor($totalMinutosGeral / 60);

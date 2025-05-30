@@ -63,4 +63,13 @@ Cada registro é salvo em uma única linha na tabela de pontos, facilitando o co
 - **Funcionário:** funcionario@teste.com / 123456
 
 ## Licençaa
-MIT
+
+## Video de como o sistema funciona
+- **Administrador:** 
+https://jam.dev/c/93ab8833-feb2-4050-b73f-a77e0aa04091
+- **Gestor:** 
+https://jam.dev/c/0f856853-ccb3-42e2-9760-eacb87d23ae0
+- **Funcionário:** 
+https://jam.dev/c/259a30f0-0223-4d3c-b9d1-7ab8f2a33101
+
+
