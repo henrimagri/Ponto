@@ -143,45 +143,10 @@ class PontoController extends Controller
     }
     
     /**
-     * Exibe o relatório de pontos do usuário logado
-     */
-    public function relatorio(Request $request)
-    {
-        $user = auth()->user();
-        
-        // Filtros de data
-        $dataInicio = $request->filled('data_inicio') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_inicio) : null;
-        $dataFim = $request->filled('data_fim') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_fim) : null;
-        
-        // Query base para registros de ponto
-        $query = $user->registrosPonto();
-        
-        // Aplicar filtros de data se fornecidos
-        if ($dataInicio) {
-            $query->where('data', '>=', $dataInicio);
-        }
-        
-        if ($dataFim) {
-            $query->where('data', '<=', $dataFim);
-        }
-        
-        // Buscar registros de ponto (sem duplicatas)
-        $datasRegistros = $query->selectRaw('MIN(id) as id, data')
-                              ->groupBy('data')
-                              ->orderBy('data', 'desc')
-                              ->take($request->filled('data_inicio') ? 100 : 30) // Aumenta o limite se houver filtro
-                              ->pluck('id');
-        
-        // Agora buscamos os registros completos baseados nos IDs únicos
-        $registros = RegistroPonto::whereIn('id', $datasRegistros)
-                                 ->orderBy('data', 'desc')
-                                 ->get();
-        
-        return view('ponto.relatorio', compact('registros', 'user', 'dataInicio', 'dataFim'));
-    }
-    
-    /**
-     * Exibe o relatório de pontos de um usuário específico (para admins e gestores)
+     * Exibe o relatório de ponto de um funcionário (SQL puro, compatível com ONLY_FULL_GROUP_BY)
+     *
+     * Esta versão utiliza SQL puro para buscar os registros de ponto do funcionário,
+     * aplicando filtros de data e agrupando corretamente por data.
      */
     public function relatorioFuncionario($id, Request $request)
     {
@@ -190,43 +155,128 @@ class PontoController extends Controller
         if (!$currentUser->isAdmin() && !$currentUser->isManager()) {
             return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
         }
-        
+
         // Buscar o usuário pelo ID
         $user = \App\Models\User::findOrFail($id);
-        
+
         // Se for gestor, só pode ver seus subordinados
         if ($currentUser->isManager() && $user->manager_id !== $currentUser->id && $user->id !== $currentUser->id) {
             return redirect()->route('dashboard')->with('error', 'Você não tem permissão para acessar este recurso.');
         }
-        
+
         // Filtros de data
-        $dataInicio = $request->filled('data_inicio') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_inicio) : null;
-        $dataFim = $request->filled('data_fim') ? \Carbon\Carbon::createFromFormat('Y-m-d', $request->data_fim) : null;
-        
-        // Query base para registros de ponto
-        $query = $user->registrosPonto();
-        
-        // Aplicar filtros de data se fornecidos
+        $dataInicio = $request->filled('data_inicio') ? $request->data_inicio : null;
+        $dataFim = $request->filled('data_fim') ? $request->data_fim : null;
+
+        // Subquery para pegar o menor ID de cada data
+        $subSql = "SELECT MIN(id) as id FROM registro_ponto WHERE user_id = ?";
+        $params = [$user->id];
         if ($dataInicio) {
-            $query->where('data', '>=', $dataInicio);
+            $subSql .= " AND data >= ?";
+            $params[] = $dataInicio;
         }
-        
         if ($dataFim) {
-            $query->where('data', '<=', $dataFim);
+            $subSql .= " AND data <= ?";
+            $params[] = $dataFim;
         }
-        
-        // Buscar registros de ponto (sem duplicatas)
-        $datasRegistros = $query->selectRaw('MIN(id) as id, data')
-                               ->groupBy('data')
-                               ->orderBy('data', 'desc')
-                               ->take($request->filled('data_inicio') ? 100 : 30) // Aumenta o limite se houver filtro
-                               ->pluck('id');
-        
-        // Agora buscamos os registros completos baseados nos IDs únicos
-        $registros = RegistroPonto::whereIn('id', $datasRegistros)
-                                  ->orderBy('data', 'desc')
-                                  ->get();
-        
+        $subSql .= " GROUP BY data ORDER BY data DESC LIMIT ".($dataInicio ? 100 : 30);
+        $ids = collect(\DB::select($subSql, $params))->pluck('id')->all();
+
+        if (empty($ids)) {
+            $registros = collect();
+        } else {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $sql = "SELECT id, data, marcacao1, marcacao2, marcacao3, marcacao4 FROM registro_ponto WHERE id IN ($placeholders) ORDER BY data DESC";
+            $registros = collect(\DB::select($sql, $ids));
+        }
+
+        // Converter campos de data/hora para objetos Carbon
+        $registros = $registros->map(function($registro) {
+            $registro->data = \Carbon\Carbon::parse($registro->data);
+            foreach ([1,2,3,4] as $i) {
+                $campo = "marcacao".$i;
+                $registro->$campo = $registro->$campo ? \Carbon\Carbon::parse($registro->$campo) : null;
+            }
+            // Adiciona métodos auxiliares como propriedades reais para uso nas views
+            $registro->todasMarcacoesRealizadas = ($registro->marcacao1 && $registro->marcacao2 && $registro->marcacao3 && $registro->marcacao4);
+            $registro->calcularHorasTrabalhadas = function() use ($registro) {
+                if ($registro->marcacao1 && $registro->marcacao2 && $registro->marcacao3 && $registro->marcacao4) {
+                    $manha = $registro->marcacao2->diffInMinutes($registro->marcacao1);
+                    $tarde = $registro->marcacao4->diffInMinutes($registro->marcacao3);
+                    $total = $manha + $tarde;
+                    return [
+                        'horas' => floor($total / 60),
+                        'minutos' => $total % 60,
+                        'total_minutos' => $total
+                    ];
+                }
+                return ['horas' => 0, 'minutos' => 0, 'total_minutos' => 0];
+            };
+            return $registro;
+        });
+
         return view('ponto.relatorio_funcionario', compact('registros', 'user', 'dataInicio', 'dataFim'));
+    }
+    
+    /**
+     * Exibe o relatório de pontos do usuário logado (SQL puro, compatível com ONLY_FULL_GROUP_BY)
+     *
+     * Esta versão utiliza SQL puro para buscar os registros de ponto do próprio usuário,
+     * aplicando filtros de data e agrupando corretamente por data.
+     */
+    public function relatorio(Request $request)
+    {
+        $user = auth()->user();
+        $dataInicio = $request->filled('data_inicio') ? $request->data_inicio : null;
+        $dataFim = $request->filled('data_fim') ? $request->data_fim : null;
+
+        // Subquery para pegar o menor ID de cada data
+        $subSql = "SELECT MIN(id) as id FROM registro_ponto WHERE user_id = ?";
+        $params = [$user->id];
+        if ($dataInicio) {
+            $subSql .= " AND data >= ?";
+            $params[] = $dataInicio;
+        }
+        if ($dataFim) {
+            $subSql .= " AND data <= ?";
+            $params[] = $dataFim;
+        }
+        $subSql .= " GROUP BY data ORDER BY data DESC LIMIT ".($dataInicio ? 100 : 30);
+        $ids = collect(\DB::select($subSql, $params))->pluck('id')->all();
+
+        if (empty($ids)) {
+            $registros = collect();
+        } else {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $sql = "SELECT id, data, marcacao1, marcacao2, marcacao3, marcacao4 FROM registro_ponto WHERE id IN ($placeholders) ORDER BY data DESC";
+            $registros = collect(\DB::select($sql, $ids));
+        }
+
+        // Converter campos de data/hora para objetos Carbon
+        $registros = $registros->map(function($registro) {
+            $registro->data = \Carbon\Carbon::parse($registro->data);
+            foreach ([1,2,3,4] as $i) {
+                $campo = "marcacao".$i;
+                $registro->$campo = $registro->$campo ? \Carbon\Carbon::parse($registro->$campo) : null;
+            }
+            // Adiciona métodos auxiliares como propriedades reais para uso nas views
+            $registro->todasMarcacoesRealizadas = ($registro->marcacao1 && $registro->marcacao2 && $registro->marcacao3 && $registro->marcacao4);
+            $registro->calcularHorasTrabalhadas = function() use ($registro) {
+                if ($registro->marcacao1 && $registro->marcacao2 && $registro->marcacao3 && $registro->marcacao4) {
+                    $manha = $registro->marcacao2->diffInMinutes($registro->marcacao1);
+                    $tarde = $registro->marcacao4->diffInMinutes($registro->marcacao3);
+                    $total = $manha + $tarde;
+                    return [
+                        'horas' => floor($total / 60),
+                        'minutos' => $total % 60,
+                        'total_minutos' => $total
+                    ];
+                }
+                return ['horas' => 0, 'minutos' => 0, 'total_minutos' => 0];
+            };
+            return $registro;
+        });
+
+        return view('ponto.relatorio', compact('registros', 'user', 'dataInicio', 'dataFim'));
     }
 }

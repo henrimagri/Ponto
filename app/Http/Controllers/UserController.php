@@ -12,25 +12,25 @@ use Illuminate\Validation\Rule;
 class UserController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Exibe a lista de usuários.
      */
     public function index(Request $request)
     {
         $user = auth()->user();
         $query = User::with('manager');
         
-        // Apply role-based filtering
+        // Aplica filtro baseado no perfil
         if ($user->isAdmin()) {
-            // Admin sees all users - no additional filtering needed
+            // Admin vê todos os usuários - sem filtro adicional
         } elseif ($user->isManager()) {
-            // Manager sees only subordinates
+            // Gestor vê apenas seus subordinados
             $query->where('manager_id', $user->id);
         } else {
-            // Employee sees only themselves
+            // Funcionário vê apenas a si mesmo
             $query->where('id', $user->id);
         }
 
-        // Apply search filters
+        // Aplica filtros de busca
         if ($request->filled('search')) {
             $search = $request->get('search');
             $query->where(function($q) use ($search) {
@@ -50,30 +50,30 @@ class UserController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Exibe o formulário de criação de novo usuário.
      */
     public function create()
     {
         $user = auth()->user();
         
-        // Only admins and managers can create users
+        // Apenas admins e gestores podem criar usuários
         if (!$user->isAdmin() && !$user->isManager()) {
-            abort(403, 'Unauthorized');
+            abort(403, 'Não autorizado');
         }
 
         return view('users.create');
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Salva um novo usuário no banco de dados.
      */
     public function store(Request $request)
     {
         $user = auth()->user();
         
-        // Only admins and managers can create users
+        // Apenas admins e gestores podem criar usuários
         if (!$user->isAdmin() && !$user->isManager()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
+            return response()->json(['error' => 'Não autorizado'], 403);
         }
         
         // Remover formatação do CEP antes da validação
@@ -95,7 +95,7 @@ class UserController extends Controller
             'manager_id' => 'nullable|exists:users,id',
         ]);
 
-        // Get address from CEP
+        // Busca endereço pelo CEP
         $addressData = $this->getAddressFromCep($validated['cep']);
         if (!$addressData) {
             return back()->withErrors(['cep' => 'CEP inválido'])->withInput();
@@ -104,7 +104,7 @@ class UserController extends Controller
         $validated = array_merge($validated, $addressData);
         $validated['password'] = Hash::make($validated['password']);
 
-        // Set manager based on role and current user permissions
+        // Define o gestor conforme o perfil e permissões
         if ($user->isManager() && $validated['role'] === 'funcionario') {
             $validated['manager_id'] = $user->id;
         }
@@ -115,30 +115,30 @@ class UserController extends Controller
     }
 
     /**
-     * Show the form for editing the specified resource.
+     * Exibe o formulário de edição de um usuário.
      */
     public function edit(User $user)
     {
         $authUser = auth()->user();
         
-        // Check permissions
+        // Verifica permissões
         if (!$this->canEditUser($authUser, $user)) {
-            abort(403, 'Unauthorized');
+            abort(403, 'Não autorizado');
         }
 
         return view('users.edit', compact('user'));
     }
 
     /**
-     * Display the specified resource.
+     * Exibe os detalhes de um usuário.
      */
     public function show(User $user)
     {
         $authUser = auth()->user();
         
-        // Check permissions
+        // Verifica permissões
         if (!$this->canViewUser($authUser, $user)) {
-            abort(403, 'Unauthorized');
+            abort(403, 'Não autorizado');
         }
 
         $user->load('manager', 'subordinates');
@@ -146,15 +146,15 @@ class UserController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * Atualiza um usuário no banco de dados.
      */
     public function update(Request $request, User $user)
     {
         $authUser = auth()->user();
         
-        // Check permissions
+        // Verifica permissões
         if (!$this->canEditUser($authUser, $user)) {
-            return response()->json(['error' => 'Unauthorized'], 403);
+            return response()->json(['error' => 'Não autorizado'], 403);
         }
         
         // Remover formatação do CEP e CPF antes da validação
@@ -176,7 +176,7 @@ class UserController extends Controller
             'manager_id' => 'nullable|exists:users,id',
         ]);
 
-        // Get address from CEP if changed
+        // Busca endereço pelo CEP se alterado
         if ($validated['cep'] !== $user->cep) {
             $addressData = $this->getAddressFromCep($validated['cep']);
             if (!$addressData) {
@@ -197,18 +197,18 @@ class UserController extends Controller
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Remove um usuário do banco de dados.
      */
     public function destroy(User $user)
     {
         $authUser = auth()->user();
         
-        // Only admins can delete users
+        // Apenas admins podem excluir usuários
         if (!$authUser->isAdmin()) {
-            abort(403, 'Unauthorized');
+            abort(403, 'Não autorizado');
         }
 
-        // Cannot delete yourself
+        // Não pode excluir a si mesmo
         if ($user->id === $authUser->id) {
             return back()->withErrors(['error' => 'Você não pode excluir sua própria conta.']);
         }
@@ -219,7 +219,7 @@ class UserController extends Controller
     }
 
     /**
-     * Get address from CEP using ViaCep API
+     * Busca endereço pelo CEP usando a API ViaCep
      */
     private function getAddressFromCep($cep)
     {
@@ -236,14 +236,14 @@ class UserController extends Controller
                 ];
             }
         } catch (\Exception $e) {
-            // Log error if needed
+            // Logar erro se necessário
         }
         
         return null;
     }
 
     /**
-     * Check if user can view another user
+     * Verifica se o usuário pode visualizar outro usuário
      */
     private function canViewUser($authUser, $targetUser)
     {
@@ -259,7 +259,7 @@ class UserController extends Controller
     }
 
     /**
-     * Check if user can edit another user
+     * Verifica se o usuário pode editar outro usuário
      */
     private function canEditUser($authUser, $targetUser)
     {
@@ -271,12 +271,12 @@ class UserController extends Controller
             return $targetUser->manager_id === $authUser->id;
         }
         
-        // Employees can only edit themselves (limited fields)
+        // Funcionários só podem editar a si mesmos (campos limitados)
         return $targetUser->id === $authUser->id;
     }
 
     /**
-     * Search CEP using ViaCep API
+     * Busca CEP usando a API ViaCep
      */
     public function searchCep($cep)
     {
@@ -306,7 +306,7 @@ class UserController extends Controller
     }
 
     /**
-     * Get managers list for dropdowns
+     * Retorna lista de gestores para dropdowns
      */
     public function getManagers()
     {
